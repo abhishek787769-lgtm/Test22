@@ -817,6 +817,16 @@
             <option value="E">Section E</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>Select Exam</label>
+          <select id="stu-exam">
+            <option value="">-- Choose Exam --</option>
+            <option value="Periodic Test 1">Periodic Test 1</option>
+            <option value="Half Yearly Exam">Half Yearly Exam</option>
+            <option value="Periodic Test 2">Periodic Test 2</option>
+            <option value="Session Ending Exam">Session Ending Exam</option>
+          </select>
+        </div>
         <div class="form-group" id="topic-group" style="display:none;">
           <label>Select Chapter / Topic</label>
           <select id="stu-topic">
@@ -1001,7 +1011,7 @@ let testStartTime = null;
 // =======================================================
 
 // Paste your Google Apps Script Web App URL here after setup:
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbz9_VMaiGD4M803XZwuPQqWGj1_LJY0Mio-DB-4IsWKxXSxTVW6Pc0bpw2Y3eXBQm1jMg/exec'; // Hardcoded — never changes
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzBlHJBANxioK6p2IfSMjhaL1ZKWACwCvKwgaXFppymDJvxtAd_zHqMKAykX5a93UXDRw/exec'; // Hardcoded — never changes
 
 function saveLocal() {
   try {
@@ -1052,6 +1062,7 @@ async function saveResultToSheet(result) {
     cls:    'Class ' + (result.studentClass||''),
     section:'Section ' + (result.section||''),
     topic:  result.topic||'',
+    examType: result.examType||'',
     score:  result.score,
     total:  result.total,
     pct:    result.pct + '%',
@@ -1102,7 +1113,7 @@ async function loadResultsFromSheet() {
     const data = await res.json();
     if (Array.isArray(data) && data.length > 0) {
       // Convert sheet rows to result objects
-      // Columns: Name, Roll, Class, Section, Topic, Score, Total, Pct, Grade, Result, Date, Time
+      // Columns: Name, Roll, Class, Section, Topic, Score, Total, Pct, Grade, Result, Date, Time, ExamType
       results = data.map(row => ({
         studentName:  String(row[0] || ''),
         studentId:    String(row[1] || ''),
@@ -1114,6 +1125,7 @@ async function loadResultsFromSheet() {
         pct:          parseInt(String(row[7]||'0').replace('%','')) || 0,
         date:         String(row[10] || new Date().toISOString()),
         timeTaken:    parseFloat(row[11]||0)*60,
+        examType:     String(row[12] || ''),
         breakdown:    []
       }));
       saveLocal();
@@ -3693,7 +3705,7 @@ function updateTopicOptions() {
 //  STUDENT TEST
 // =======================================================
 // -- CHECK IF ROLL NUMBER ALREADY ATTEMPTED THIS TEST --
-async function checkAlreadyAttempted(rollNo, cls, topicKey) {
+async function checkAlreadyAttempted(rollNo, cls, topicKey, examType) {
   if (!GAS_URL) return false;
   try {
     const res = await fetch(GAS_URL + '?action=getResults', { mode:'cors' });
@@ -3704,12 +3716,14 @@ async function checkAlreadyAttempted(rollNo, cls, topicKey) {
     const topicsList = CLASS_TOPICS[cls] || [];
     const topicObj   = topicsList.find(t => t.key === topicKey);
     const topicLabel = (topicObj ? topicObj.label : topicKey).toLowerCase().trim();
-    // Sheet columns: Name, Roll, Class, Section, Topic, Score, Total, Pct, Grade, Result, Date, Time
+    const examLower  = (examType || '').toLowerCase().trim();
+    // Sheet columns: Name, Roll, Class, Section, Topic, Score, Total, Pct, Grade, Result, Date, Time, ExamType
     return data.some(row => {
       const roll  = String(row[1]||'').trim();
       const rcls  = String(row[2]||'').replace('Class ','').trim();
       const topic = String(row[4]||'').toLowerCase().trim();
-      return roll === rollNo && rcls === cls && topic === topicLabel;
+      const exam  = String(row[12]||'').toLowerCase().trim();
+      return roll === rollNo && rcls === cls && topic === topicLabel && exam === examLower;
     });
   } catch(e) {
     return false; // agar sheet check na ho sake toh block mat karo
@@ -3721,6 +3735,7 @@ async function startTest() {
   const id       = document.getElementById('stu-id').value.trim();
   const cls      = document.getElementById('stu-class').value;
   const section  = document.getElementById('stu-section').value;
+  const examType = document.getElementById('stu-exam') ? document.getElementById('stu-exam').value : '';
   const topicKey = document.getElementById('stu-topic') ? document.getElementById('stu-topic').value : '';
   const msg      = document.getElementById('student-login-msg');
 
@@ -3761,6 +3776,10 @@ async function startTest() {
     msg.style.display='block'; msg.style.background='#450a0a'; msg.style.color='var(--red)';
     msg.textContent = '❌ Apna section select karo.'; return;
   }
+  if (!examType) {
+    msg.style.display='block'; msg.style.background='#450a0a'; msg.style.color='var(--red)';
+    msg.textContent = '❌ Exam select karo (Periodic Test 1 / Half Yearly / Periodic Test 2 / Session Ending).'; return;
+  }
   if (!topicKey) {
     msg.style.display='block'; msg.style.background='#450a0a'; msg.style.color='var(--red)';
     msg.textContent = '❌ Chapter / Topic select karo.'; return;
@@ -3768,21 +3787,21 @@ async function startTest() {
 
   // -- DUPLICATE CHECK --
   // Check locally first (instant)
-  const attemptKey = `voced-attempt-${cls}-${id}-${topicKey}`;
+  const attemptKey = `voced-attempt-${cls}-${id}-${topicKey}-${examType}`;
   if (localStorage.getItem(attemptKey)) {
     msg.style.display='block'; msg.style.background='#450a0a'; msg.style.color='var(--red)';
-    msg.innerHTML = '🚫 <b>Aap yeh test pehle de chuke ho!</b><br><span style="font-size:0.82rem;font-weight:400;">Ek roll number se ek chapter ka test sirf ek baar diya ja sakta hai.</span>';
+    msg.innerHTML = '🚫 <b>Aap yeh test pehle de chuke ho!</b><br><span style="font-size:0.82rem;font-weight:400;">Ek roll number se ek chapter ka test (isi exam ke liye) sirf ek baar diya ja sakta hai.</span>';
     return;
   }
 
-  // Also check Google Sheet for this roll+class+topic combo (cross-device check)
+  // Also check Google Sheet for this roll+class+topic+exam combo (cross-device check)
   if (GAS_URL) {
     msg.style.display='block'; msg.style.background='#1a0d00'; msg.style.color='var(--accent)';
     msg.textContent = '⏳ Checking... please wait.';
-    const alreadyDone = await checkAlreadyAttempted(id, cls, topicKey);
+    const alreadyDone = await checkAlreadyAttempted(id, cls, topicKey, examType);
     if (alreadyDone) {
       msg.style.display='block'; msg.style.background='#450a0a'; msg.style.color='var(--red)';
-      msg.innerHTML = '🚫 <b>Aap yeh test pehle de chuke ho!</b><br><span style="font-size:0.82rem;font-weight:400;">Roll No. ' + id + ' se yeh chapter ka test already submit ho chuka hai.</span>';
+      msg.innerHTML = '🚫 <b>Aap yeh test pehle de chuke ho!</b><br><span style="font-size:0.82rem;font-weight:400;">Roll No. ' + id + ' se yeh chapter ka test (' + examType + ') already submit ho chuka hai.</span>';
       return;
     }
   }
@@ -3834,7 +3853,7 @@ async function startTest() {
   const topicObj = topicsList.find(t => t.key === topicKey);
   const topicLabel = topicObj ? topicObj.label : topicKey;
 
-  currentStudent = { name, id, class: cls, section, topic: topicLabel };
+  currentStudent = { name, id, class: cls, section, topic: topicLabel, examType };
   window._testTopicKey = topicKey;
   testAnswers = {};
   currentQ = 0;
@@ -3846,7 +3865,7 @@ async function startTest() {
   const finalQ = shuffled.slice(0, maxQ);
   window._testQuestions = finalQ;
 
-  document.getElementById('test-title-bar').textContent = `Class ${cls}-${section} - ${topicLabel}`;
+  document.getElementById('test-title-bar').textContent = `Class ${cls}-${section} - ${topicLabel} (${examType})`;
   document.getElementById('test-student-bar').textContent = `${name} (Roll: ${id}) · Class ${cls}-${section}`;
 
   startTimer();
@@ -4022,14 +4041,14 @@ function submitTest() {
   const result = {
     studentName: currentStudent.name, studentId: currentStudent.id,
     studentClass: currentStudent.class, section: currentStudent.section,
-    topic: currentStudent.topic, score, total: qs.length, pct, timeTaken,
+    topic: currentStudent.topic, examType: currentStudent.examType || '', score, total: qs.length, pct, timeTaken,
     date: new Date().toISOString(), breakdown
   };
   results.push(result);
   saveData();
 
-  // Mark this roll+class+topic as attempted (prevents retake on same device)
-  const attemptKey = `voced-attempt-${currentStudent.class}-${currentStudent.id}-${(window._testTopicKey||currentStudent.topic).toLowerCase()}`;
+  // Mark this roll+class+topic+exam as attempted (prevents retake on same device, but allows different exams)
+  const attemptKey = `voced-attempt-${currentStudent.class}-${currentStudent.id}-${(window._testTopicKey||currentStudent.topic).toLowerCase()}-${currentStudent.examType||''}`;
   try { localStorage.setItem(attemptKey, '1'); } catch(e) {}
 
   // Send to Google Sheet
@@ -5447,6 +5466,7 @@ function buildRow(r) {
     'Class ' + (r.studentClass || '-'),
     'Section ' + (r.section || '-'),
     r.topic || '-',
+    r.examType || '-',
     r.score + '/' + r.total,
     r.pct + '%',
     calcGrade(r.pct),
@@ -5454,7 +5474,7 @@ function buildRow(r) {
   ];
 }
 
-const XLS_HEADER = ['Student Name','Roll No.','Class','Section','Test Name','Marks','Percentage','Grade','Result'];
+const XLS_HEADER = ['Student Name','Roll No.','Class','Section','Test Name','Exam','Marks','Percentage','Grade','Result'];
 
 function downloadExcel() {
   if (!results.length) { showToast('⚠️ No results yet!'); return; }
