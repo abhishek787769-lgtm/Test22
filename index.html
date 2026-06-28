@@ -578,6 +578,14 @@
               <option value="">All Chapters</option>
             </select>
           </div>
+          <div class="form-group" style="margin-bottom:0;flex:1;min-width:150px;">
+            <label>Source</label>
+            <select id="qb-filter-source" onchange="renderQBank()">
+              <option value="">All Questions</option>
+              <option value="builtin">📚 Pre-loaded (Built-in)</option>
+              <option value="custom">✍️ My Added Questions</option>
+            </select>
+          </div>
           <button class="btn btn-outline btn-sm" onclick="resetQBFilter()" style="height:44px;">✕ Clear Filter</button>
           <button class="btn btn-red btn-sm" onclick="clearQuestions()" style="height:44px;">🗑 Clear All</button>
         </div>
@@ -3443,32 +3451,64 @@ function renderQItemWithMeta(q, serialNo) {
     optHtml = `<div class="q-options"><div class="q-opt${q.answer==='True'?' correct':''}">True</div><div class="q-opt${q.answer==='False'?' correct':''}">False</div></div>`;
   }
   const classBadge = q.forClass ? `<span style="background:#1e3a5f;color:var(--blue);font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-right:6px">Class ${q.forClass}</span>` : '';
-  const chapBadge  = q.forChapter ? `<span style="background:#1a0d00;color:var(--accent);font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px">${q.forChapter.replace(/Project \d+ - /,'')}</span>` : '';
+  const chapBadge  = q.forChapter ? `<span style="background:#1a0d00;color:var(--accent);font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-right:6px">${q.forChapter.replace(/Project \d+ - /,'')}</span>` : '';
   const numBadge   = serialNo ? `<span style="background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:10px;margin-right:6px;font-family:'DM Mono',monospace">#${serialNo}</span>` : '';
+  const sourceBadge = q.source === 'builtin'
+    ? `<span style="background:#0d2818;color:var(--green);font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-right:6px">📚 Built-in</span>`
+    : `<span style="background:#2e1a3d;color:#c084fc;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-right:6px">✍️ Mine</span>`;
+  const deleteBtn = (q.source !== 'builtin' && q.id) ? `<button class="q-delete" onclick="deleteQ(${q.id})">✕</button>` : '';
   return `<div class="q-item">
-    <button class="q-delete" onclick="deleteQ(${q.id})">✕</button>
-    <div style="margin-bottom:8px">${numBadge}${classBadge}${chapBadge}</div>
+    ${deleteBtn}
+    <div style="margin-bottom:8px">${numBadge}${sourceBadge}${classBadge}${chapBadge}</div>
     <div class="q-type ${cls2}">${label}</div>
     <div class="q-text">${q.question}</div>
     ${optHtml}
   </div>`;
 }
 
+// Find which Class + Chapter label a built-in QUESTION_BANK topic-key belongs to
+function getTopicMetaForKey(topicKey) {
+  for (const cls of Object.keys(CLASS_TOPICS)) {
+    const found = CLASS_TOPICS[cls].find(t => t.key === topicKey);
+    if (found) return { cls, label: found.label };
+  }
+  return { cls: '', label: topicKey.replace(/\b\w/g, c => c.toUpperCase()) + ' (Extra)' };
+}
+
+// Flatten the built-in QUESTION_BANK into the same shape as manually-added questions
+function getBuiltinQuestionsFlat() {
+  const out = [];
+  Object.keys(QUESTION_BANK).forEach(key => {
+    if (key === 'default') return; // skip generic fallback bucket
+    const meta = getTopicMetaForKey(key);
+    QUESTION_BANK[key].forEach(q => {
+      out.push({ ...q, forClass: meta.cls, forChapter: meta.label, source: 'builtin' });
+    });
+  });
+  return out;
+}
+
 function renderQBank() {
   const el         = document.getElementById('qbank-list');
   const filterCls  = (document.getElementById('qb-filter-class')?.value  || '').trim();
   const filterChap = (document.getElementById('qb-filter-chapter')?.value || '').trim();
+  const filterSrc  = (document.getElementById('qb-filter-source')?.value || '').trim(); // '', 'builtin', 'custom'
 
-  let filtered = questions;
+  const builtin  = getBuiltinQuestionsFlat();
+  const combined = [...questions, ...builtin];
+
+  let filtered = combined;
   if (filterCls)  filtered = filtered.filter(q => String(q.forClass||'') === filterCls);
   if (filterChap) filtered = filtered.filter(q => (q.forChapter||'') === filterChap);
+  if (filterSrc)  filtered = filtered.filter(q => (filterSrc === 'builtin' ? q.source === 'builtin' : q.source !== 'builtin'));
 
   // -- TOP SUMMARY --
-  // Chapter-wise count summary
+  // Chapter-wise count summary, split by source (📚 built-in vs ✍️ mine)
   const chapterMap = {};
   filtered.forEach(q => {
     const key = `Class ${q.forClass||'?'} › ${(q.forChapter||'General').replace(/Project \d+ - /,'')}`;
-    chapterMap[key] = (chapterMap[key] || 0) + 1;
+    if (!chapterMap[key]) chapterMap[key] = { builtin: 0, custom: 0 };
+    if (q.source === 'builtin') chapterMap[key].builtin++; else chapterMap[key].custom++;
   });
 
   let summaryHtml = '';
@@ -3476,7 +3516,8 @@ function renderQBank() {
     const chips = Object.entries(chapterMap).map(([k,v]) =>
       `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:0.8rem;margin:4px;">
         <span style="color:var(--muted)">${k}</span>
-        <span style="background:var(--accent);color:white;font-weight:800;font-size:0.75rem;padding:2px 8px;border-radius:20px;">${v}</span>
+        <span style="background:var(--green);color:white;font-weight:800;font-size:0.7rem;padding:2px 7px;border-radius:20px;" title="Built-in">📚${v.builtin}</span>
+        <span style="background:#c084fc;color:#1a0a24;font-weight:800;font-size:0.7rem;padding:2px 7px;border-radius:20px;" title="Mine">✍️${v.custom}</span>
       </div>`
     ).join('');
     summaryHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;">
@@ -3488,22 +3529,30 @@ function renderQBank() {
   }
 
   // -- COUNT LABEL --
-  let countLabel = `${questions.length} question${questions.length!==1?'s':''} total in bank`;
-  if (filterCls || filterChap) {
+  const builtinTotal = combined.filter(q => q.source === 'builtin').length;
+  const customTotal   = combined.length - builtinTotal;
+  let countLabel = `${combined.length} question${combined.length!==1?'s':''} total (📚 ${builtinTotal} built-in + ✍️ ${customTotal} yours)`;
+  if (filterCls || filterChap || filterSrc) {
     countLabel = `${filtered.length} question${filtered.length!==1?'s':''} shown`;
     if (filterCls)  countLabel += ` · Class ${filterCls}`;
     if (filterChap) countLabel += ` · ${filterChap}`;
-    countLabel += ` (Total in bank: ${questions.length})`;
+    if (filterSrc)  countLabel += ` · ${filterSrc==='builtin' ? 'Built-in only' : 'Mine only'}`;
+    countLabel += ` (Total in bank: ${combined.length})`;
   }
   document.getElementById('qbank-count').textContent = countLabel;
 
   if (!filtered.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>${questions.length ? 'Is filter ke liye koi question nahi.' : 'Abhi koi question nahi. Auto Load ya Add Question use karo.'}</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>${combined.length ? 'Is filter ke liye koi question nahi.' : 'Abhi koi question nahi.'}</p></div>`;
     return;
   }
 
-  // -- RENDER WITH SERIAL NUMBERS --
-  el.innerHTML = summaryHtml + filtered.map((q, i) => renderQItemWithMeta(q, i+1)).join('');
+  // -- RENDER (capped for phone performance — narrow the filter to see everything) --
+  const CAP = 150;
+  const toShow = filtered.slice(0, CAP);
+  const extraNotice = filtered.length > CAP
+    ? `<p style="text-align:center;color:var(--muted);font-size:0.85rem;margin-top:14px;">...aur ${filtered.length - CAP} questions hain. Specific Class/Chapter select karo poora dekhne ke liye.</p>`
+    : '';
+  el.innerHTML = summaryHtml + toShow.map((q, i) => renderQItemWithMeta(q, i+1)).join('') + extraNotice;
 }
 
 function deleteQ(id) {
@@ -5394,6 +5443,7 @@ function updateQBChapters() {
 function resetQBFilter() {
   document.getElementById('qb-filter-class').value = '';
   document.getElementById('qb-filter-chapter').value = '';
+  document.getElementById('qb-filter-source').value = '';
   updateQBChapters();
 }
 
