@@ -3699,12 +3699,17 @@ async function checkAlreadyAttempted(rollNo, cls, topicKey) {
     const res = await fetch(GAS_URL + '?action=getResults', { mode:'cors' });
     const data = await res.json();
     if (!Array.isArray(data)) return false;
+    // Resolve the full topic label for this class+topicKey so we compare exact topics,
+    // not just the first word (which caused false blocks e.g. "School Kitchen Garden" vs "School Museum")
+    const topicsList = CLASS_TOPICS[cls] || [];
+    const topicObj   = topicsList.find(t => t.key === topicKey);
+    const topicLabel = (topicObj ? topicObj.label : topicKey).toLowerCase().trim();
     // Sheet columns: Name, Roll, Class, Section, Topic, Score, Total, Pct, Grade, Result, Date, Time
     return data.some(row => {
       const roll  = String(row[1]||'').trim();
       const rcls  = String(row[2]||'').replace('Class ','').trim();
-      const topic = String(row[4]||'').toLowerCase();
-      return roll === rollNo && rcls === cls && topic.includes(topicKey.split(' ')[0].toLowerCase());
+      const topic = String(row[4]||'').toLowerCase().trim();
+      return roll === rollNo && rcls === cls && topic === topicLabel;
     });
   } catch(e) {
     return false; // agar sheet check na ho sake toh block mat karo
@@ -4024,7 +4029,7 @@ function submitTest() {
   saveData();
 
   // Mark this roll+class+topic as attempted (prevents retake on same device)
-  const attemptKey = `voced-attempt-${currentStudent.class}-${currentStudent.id}-${(window._testTopicKey||currentStudent.topic).toLowerCase().split(' ').slice(0,2).join(' ')}`;
+  const attemptKey = `voced-attempt-${currentStudent.class}-${currentStudent.id}-${(window._testTopicKey||currentStudent.topic).toLowerCase()}`;
   try { localStorage.setItem(attemptKey, '1'); } catch(e) {}
 
   // Send to Google Sheet
