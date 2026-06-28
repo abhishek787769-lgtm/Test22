@@ -382,7 +382,6 @@
 
       <div class="tabs">
         <button class="tab active" onclick="switchTab('tab-generate',this)">🤖 Auto Load</button>
-        <button class="tab" onclick="switchTab('tab-addq',this)">➕ Add Question</button>
         <button class="tab" onclick="switchTab('tab-questions',this)">📋 Question Bank</button>
         <button class="tab" onclick="switchTab('tab-results',this)">📊 Results</button>
 
@@ -473,93 +472,6 @@
         </div>
         <div id="gen-preview"></div>
       </div>
-
-      <!-- TAB: ADD QUESTION MANUALLY -->
-      <div id="tab-addq" class="tab-content">
-        <div class="card" style="max-width:640px;">
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">➕ Add Your Own MCQ</h3>
-          <p style="color:var(--muted);font-size:0.85rem;margin-bottom:20px;">Select class &amp; chapter, write the question with 4 options, mark the correct answer.</p>
-
-          <!-- Class + Chapter selectors -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="form-group">
-              <label>Class</label>
-              <select id="aq-class" onchange="updateAQChapters('aq')">
-                <option value="">-- Select Class --</option>
-                <option value="6">Class 6</option>
-                <option value="7">Class 7</option>
-                <option value="8">Class 8</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Chapter / Topic</label>
-              <select id="aq-chapter">
-                <option value="">-- Select Chapter --</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Question Text</label>
-            <textarea id="aq-question" rows="3" placeholder="Type your question here…" style="resize:vertical;"></textarea>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
-            <div class="form-group" style="margin-bottom:0"><label>Option A</label><input type="text" id="aq-a" placeholder="Option A" /></div>
-            <div class="form-group" style="margin-bottom:0"><label>Option B</label><input type="text" id="aq-b" placeholder="Option B" /></div>
-            <div class="form-group" style="margin-bottom:0"><label>Option C</label><input type="text" id="aq-c" placeholder="Option C" /></div>
-            <div class="form-group" style="margin-bottom:0"><label>Option D</label><input type="text" id="aq-d" placeholder="Option D" /></div>
-          </div>
-          <div class="form-group">
-            <label>Correct Answer</label>
-            <select id="aq-correct">
-              <option value="">-- Select correct option --</option>
-              <option value="A">A</option><option value="B">B</option>
-              <option value="C">C</option><option value="D">D</option>
-            </select>
-          </div>
-          <div id="aq-msg" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600;"></div>
-          <button class="btn btn-primary" onclick="addManualQuestion()" style="width:100%;">✅ Add to Question Bank</button>
-        </div>
-
-        <!-- True/False adder -->
-        <div class="card" style="max-width:640px;margin-top:20px;">
-          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:4px;">➕ Add True / False Question</h3>
-          <p style="color:var(--muted);font-size:0.85rem;margin-bottom:20px;">Select class &amp; chapter, write a statement, mark True or False.</p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="form-group">
-              <label>Class</label>
-              <select id="tf-class" onchange="updateAQChapters('tf')">
-                <option value="">-- Select Class --</option>
-                <option value="6">Class 6</option>
-                <option value="7">Class 7</option>
-                <option value="8">Class 8</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Chapter / Topic</label>
-              <select id="tf-chapter">
-                <option value="">-- Select Chapter --</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Statement</label>
-            <textarea id="tf-question" rows="2" placeholder="Type your true/false statement here…" style="resize:vertical;"></textarea>
-          </div>
-          <div class="form-group">
-            <label>Correct Answer</label>
-            <select id="tf-correct">
-              <option value="">-- Select --</option>
-              <option value="True">True</option>
-              <option value="False">False</option>
-            </select>
-          </div>
-          <div id="tf-msg" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600;"></div>
-          <button class="btn btn-primary" onclick="addTFQuestion()" style="width:100%;">✅ Add to Question Bank</button>
-        </div>
-      </div>
-
-      <!-- TAB: QUESTION BANK -->
       <div id="tab-questions" class="tab-content">
         <!-- Filter bar -->
         <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;background:var(--surface2);padding:16px;border-radius:var(--radius);border:1px solid var(--border);">
@@ -586,6 +498,7 @@
               <option value="custom">✍️ My Added Questions</option>
             </select>
           </div>
+          <button class="btn btn-green btn-sm" onclick="downloadTopicQuestions()" style="height:44px;">📥 Download Topic Questions</button>
           <button class="btn btn-outline btn-sm" onclick="resetQBFilter()" style="height:44px;">✕ Clear Filter</button>
           <button class="btn btn-red btn-sm" onclick="clearQuestions()" style="height:44px;">🗑 Clear All</button>
         </div>
@@ -1182,32 +1095,8 @@ async function loadQuestionsFromSheet() {
 }
 
 // Send a newly-added teacher question to the Google Sheet "QuestionBank" tab (permanent, cross-device)
-async function sendQuestionToSheet(q) {
-  if (!GAS_URL) return;
-  const strip = s => (s||'').replace(/^[A-D]\.\s*/, '');
-  const opts = q.options || [];
-  const params = new URLSearchParams({
-    action:   'addQuestion',
-    cls:      q.forClass || '',
-    topic:    q.forChapter || '',
-    type:     q.type || 'mcq',
-    question: q.question || '',
-    optA: strip(opts[0]), optB: strip(opts[1]), optC: strip(opts[2]), optD: strip(opts[3]),
-    answer:   q.answer || ''
-  });
-  try {
-    await fetch(GAS_URL + '?' + params.toString(), { method:'GET', mode:'no-cors' });
-  } catch (e1) {
-    try {
-      await new Promise((resolve) => {
-        const img = new Image();
-        img.onload = img.onerror = () => resolve();
-        img.src = GAS_URL + '?' + params.toString() + '&_t=' + Date.now();
-        setTimeout(resolve, 8000);
-      });
-    } catch (e2) {}
-  }
-}
+// (sendQuestionToSheet removed — manual question adding feature was removed.
+//  New questions are now added directly in QUESTION_BANK in the source code.)
 
 
 // =======================================================
@@ -3561,6 +3450,62 @@ function deleteQ(id) {
   showToast('Question deleted');
 }
 
+// Download all questions of the currently selected Class+Chapter as a printable HTML file
+// (built-in + custom combined) — teacher can open/print this to teach offline in class.
+function downloadTopicQuestions() {
+  const filterCls  = (document.getElementById('qb-filter-class')?.value  || '').trim();
+  const filterChap = (document.getElementById('qb-filter-chapter')?.value || '').trim();
+
+  if (!filterCls || !filterChap) {
+    showToast('⚠️ Pehle Class aur Chapter dono select karo upar filter mein.');
+    return;
+  }
+
+  const builtin  = getBuiltinQuestionsFlat();
+  const combined = [...questions, ...builtin];
+  const list = combined.filter(q => String(q.forClass||'') === filterCls && (q.forChapter||'') === filterChap);
+
+  if (!list.length) {
+    showToast('⚠️ Is topic ke liye koi question nahi mila.');
+    return;
+  }
+
+  const itemsHtml = list.map((q, i) => {
+    let optsHtml = '';
+    if (q.type === 'mcq') {
+      optsHtml = `<ul style="margin:6px 0 0 0;padding-left:22px;">` +
+        q.options.map(o => `<li style="margin-bottom:4px;${o.startsWith(q.answer) ? 'font-weight:700;color:#15803d;' : ''}">${o}${o.startsWith(q.answer) ? ' ✓' : ''}</li>`).join('') +
+        `</ul>`;
+    } else {
+      optsHtml = `<p style="margin:6px 0 0 0;"><b style="color:#15803d;">Sahi Jawab: ${q.answer} ✓</b></p>`;
+    }
+    return `<div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #ddd;">
+      <p style="margin:0;font-weight:700;">${i+1}. ${q.question} <span style="font-size:0.75em;color:#888;font-weight:400;">(${q.source==='builtin'?'Built-in':'Mine'})</span></p>
+      ${optsHtml}
+    </div>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Class ${filterCls} - ${filterChap}</title>
+    <style>body{font-family:Arial, sans-serif; padding:24px; max-width:800px; margin:auto; color:#111;}
+    h1{font-size:1.3rem;color:#f97316;} h2{font-size:1rem;color:#555;font-weight:400;margin-top:4px;}</style>
+    </head><body>
+    <h1>VocEdAssess — Class ${filterCls}</h1>
+    <h2>${filterChap} &nbsp;|&nbsp; ${list.length} Questions &nbsp;|&nbsp; ${new Date().toLocaleDateString()}</h2>
+    <hr style="margin:16px 0;">
+    ${itemsHtml}
+  </body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `Class${filterCls}_${filterChap.replace(/[^a-zA-Z0-9]+/g,'_')}.html`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  showToast('✅ Downloaded! Browser mein khol kar print/padha ja sakta hai.');
+}
+
 function clearQuestions() {
   if (!confirm('Delete all questions?')) return;
   questions = []; saveData(); renderQBank(); refreshTeacher();
@@ -5423,14 +5368,6 @@ function resetStudentAttempt() {
   msg.textContent=`✅ Roll ${roll} (Class ${cls}) ka attempt reset ho gaya - ab woh dobara test de sakta hai!`;
 }
 
-function updateAQChapters(prefix) {
-  const cls = document.getElementById(prefix + '-class').value;
-  const sel = document.getElementById(prefix + '-chapter');
-  const topics = cls ? (CLASS_TOPICS[cls] || []) : [];
-  sel.innerHTML = '<option value="">-- Select Chapter --</option>' +
-    topics.map(t => `<option value="${t.label}">${t.label}</option>`).join('');
-}
-
 function updateQBChapters() {
   const cls = document.getElementById('qb-filter-class').value;
   const sel = document.getElementById('qb-filter-chapter');
@@ -5446,68 +5383,6 @@ function resetQBFilter() {
   document.getElementById('qb-filter-source').value = '';
   updateQBChapters();
 }
-
-function addManualQuestion() {
-  const cls    = document.getElementById('aq-class').value;
-  const chap   = document.getElementById('aq-chapter').value;
-  const q      = document.getElementById('aq-question').value.trim();
-  const a      = document.getElementById('aq-a').value.trim();
-  const b      = document.getElementById('aq-b').value.trim();
-  const c      = document.getElementById('aq-c').value.trim();
-  const d      = document.getElementById('aq-d').value.trim();
-  const ans    = document.getElementById('aq-correct').value;
-  const msg    = document.getElementById('aq-msg');
-
-  if (!cls || !chap) {
-    msg.style.cssText='display:block;background:#450a0a;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-    msg.textContent = '❌ Please select a Class and Chapter first.'; return;
-  }
-  if (!q || !a || !b || !c || !d || !ans) {
-    msg.style.cssText='display:block;background:#450a0a;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-    msg.textContent = '❌ Please fill in the question, all 4 options, and the correct answer.'; return;
-  }
-
-  const newQ = { id: Date.now(), type:'mcq', forClass: cls, forChapter: chap,
-    question: q, options: ['A. '+a,'B. '+b,'C. '+c,'D. '+d], answer: ans };
-  questions.push(newQ);
-  saveData(); refreshTeacher();
-  sendQuestionToSheet(newQ);
-
-  ['aq-question','aq-a','aq-b','aq-c','aq-d'].forEach(id => document.getElementById(id).value='');
-  document.getElementById('aq-correct').value='';
-  msg.style.cssText='display:block;background:#14532d;color:var(--green);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-  msg.textContent = `✅ MCQ added to Class ${cls} - ${chap}! (${questions.length} total)`;
-  setTimeout(()=>msg.style.display='none', 3500);
-}
-
-function addTFQuestion() {
-  const cls  = document.getElementById('tf-class').value;
-  const chap = document.getElementById('tf-chapter').value;
-  const q    = document.getElementById('tf-question').value.trim();
-  const ans  = document.getElementById('tf-correct').value;
-  const msg  = document.getElementById('tf-msg');
-
-  if (!cls || !chap) {
-    msg.style.cssText='display:block;background:#450a0a;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-    msg.textContent = '❌ Please select a Class and Chapter first.'; return;
-  }
-  if (!q || !ans) {
-    msg.style.cssText='display:block;background:#450a0a;color:var(--red);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-    msg.textContent = '❌ Please enter a statement and select True or False.'; return;
-  }
-
-  const newQ = { id: Date.now(), type:'truefalse', forClass: cls, forChapter: chap, question: q, answer: ans };
-  questions.push(newQ);
-  saveData(); refreshTeacher();
-  sendQuestionToSheet(newQ);
-
-  document.getElementById('tf-question').value='';
-  document.getElementById('tf-correct').value='';
-  msg.style.cssText='display:block;background:#14532d;color:var(--green);padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.87rem;font-weight:600';
-  msg.textContent = `✅ True/False added to Class ${cls} - ${chap}! (${questions.length} total)`;
-  setTimeout(()=>msg.style.display='none', 3500);
-}
-
 
 function buildRow(r) {
   return [
