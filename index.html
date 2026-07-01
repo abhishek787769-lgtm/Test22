@@ -369,16 +369,11 @@
       </div>
     </nav>
     <div class="section-header">
-      <h2>Dashboard</h2>
-      <p>Manage AI-generated questions and view student results</p>
+      <h2>Teacher Dashboard</h2>
+      <p>Class aur Section wise tests diye gaye hain</p>
     </div>
     <div class="section-body">
-      <div class="card-grid" style="margin-bottom:28px;" id="stat-cards">
-        <div class="stat-card"><div class="val" id="stat-q">0</div><div class="lbl">Questions in Bank</div></div>
-        <div class="stat-card"><div class="val" id="stat-s">0</div><div class="lbl">Students Tested</div></div>
-        <div class="stat-card"><div class="val" id="stat-avg">—</div><div class="lbl">Average Score</div></div>
-        <div class="stat-card"><div class="val" id="stat-pass">—</div><div class="lbl">Pass Rate</div></div>
-      </div>
+      <div id="class-section-stats" style="margin-bottom:28px;overflow-x:auto;"></div>
 
       <div class="tabs">
         <button class="tab active" onclick="switchTab('tab-questions',this)">📋 Question Bank</button>
@@ -3195,17 +3190,67 @@ function saveSettings() {
 //  REFRESH STATS
 // =======================================================
 function refreshTeacher() {
-  document.getElementById('stat-q').textContent = questions.length;
-  document.getElementById('stat-s').textContent = results.length;
-  if (results.length) {
-    const avg = Math.round(results.reduce((a, r) => a + r.pct, 0) / results.length);
-    const pass = Math.round(results.filter(r => r.pct >= settings.passScore).length / results.length * 100);
-    document.getElementById('stat-avg').textContent = avg + '%';
-    document.getElementById('stat-pass').textContent = pass + '%';
-  } else {
-    document.getElementById('stat-avg').textContent = '-';
-    document.getElementById('stat-pass').textContent = '-';
+  const el = document.getElementById('class-section-stats');
+  if (!el) return;
+
+  if (!results.length) {
+    el.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;color:var(--muted);font-size:0.9rem;">
+      📋 Abhi tak koi test nahi diya gaya hai.
+    </div>`;
+    return;
   }
+
+  // Group results by Class → Section → count
+  const map = {};
+  results.forEach(r => {
+    const cls = r.studentClass ? 'Class ' + r.studentClass : 'Unknown';
+    const sec = r.section || '?';
+    if (!map[cls]) map[cls] = {};
+    map[cls][sec] = (map[cls][sec] || 0) + 1;
+  });
+
+  const classes = Object.keys(map).sort();
+  const allSections = [...new Set(results.map(r => r.section || '?'))].sort();
+
+  let html = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+    <div style="padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border);font-weight:700;font-size:0.95rem;">
+      📊 Class / Section wise Tests — Total: <span style="color:var(--accent)">${results.length}</span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <thead>
+        <tr style="background:var(--surface2);">
+          <th style="padding:10px 14px;text-align:left;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);">Class</th>
+          ${allSections.map(s => `<th style="padding:10px 14px;text-align:center;color:var(--accent);font-weight:700;border-bottom:1px solid var(--border);">Sec ${s}</th>`).join('')}
+          <th style="padding:10px 14px;text-align:center;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);">Total</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  classes.forEach((cls, i) => {
+    const rowTotal = Object.values(map[cls]).reduce((a, b) => a + b, 0);
+    html += `<tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--surface2);'}">
+      <td style="padding:10px 14px;font-weight:700;color:var(--blue);">${cls}</td>
+      ${allSections.map(sec => {
+        const count = map[cls][sec] || 0;
+        return `<td style="padding:10px 14px;text-align:center;${count > 0 ? 'color:white;font-weight:700;' : 'color:var(--muted);'}">${count > 0 ? count : '—'}</td>`;
+      }).join('')}
+      <td style="padding:10px 14px;text-align:center;font-weight:800;color:var(--accent);">${rowTotal}</td>
+    </tr>`;
+  });
+
+  // Section totals row
+  html += `<tr style="background:var(--surface2);border-top:2px solid var(--border);">
+    <td style="padding:10px 14px;font-weight:700;color:var(--muted);">Total</td>
+    ${allSections.map(sec => {
+      const secTotal = classes.reduce((sum, cls) => sum + (map[cls][sec] || 0), 0);
+      return `<td style="padding:10px 14px;text-align:center;font-weight:800;color:var(--accent);">${secTotal}</td>`;
+    }).join('')}
+    <td style="padding:10px 14px;text-align:center;font-weight:800;color:var(--accent);">${results.length}</td>
+  </tr>`;
+
+  html += `</tbody></table></div></div>`;
+  el.innerHTML = html;
 }
 
 // =======================================================
@@ -5030,6 +5075,8 @@ function showToast(msg) {
   loadLocal();
   refreshTeacher();
   await loadData();
+  // Auto-load results from Sheet so dashboard stats are accurate
+  try { await loadResultsFromSheet(); } catch(e) {}
   refreshTeacher();
   renderResults();
 })();
