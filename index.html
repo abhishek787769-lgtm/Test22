@@ -531,7 +531,6 @@
             <input type="text" id="set-title" placeholder="Vocational Education Assessment" />
           </div>
 
-
           <!-- Questions per student -->
           <div class="form-group">
             <label>Questions Per Student (random from full bank)</label>
@@ -549,6 +548,37 @@
             <div style="font-size:0.75rem;color:var(--muted);margin-top:5px;">🎲 Each student gets a different random set — no two students get same questions.</div>
           </div>
 
+          <!-- Per Question Timer -->
+          <div class="form-group">
+            <label>⏱ Timer Per Question (seconds)</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <select id="set-per-q-time" style="flex:1;min-width:160px;">
+                <option value="0">No timer (unlimited)</option>
+                <option value="30">30 seconds</option>
+                <option value="45">45 seconds</option>
+                <option value="60">60 seconds (1 min)</option>
+                <option value="90">90 seconds</option>
+                <option value="120">120 seconds (2 min)</option>
+              </select>
+            </div>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:5px;">⏳ Har question ke liye countdown — time khatam hone par next question auto-move.</div>
+          </div>
+
+          <!-- Overall Time Limit -->
+          <div class="form-group">
+            <label>⏰ Overall Test Time Limit (minutes)</label>
+            <select id="set-time-limit" style="width:100%;">
+              <option value="0">No overall limit</option>
+              <option value="15">15 minutes</option>
+              <option value="20">20 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="40">40 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+            <div style="font-size:0.75rem;color:var(--muted);margin-top:5px;">🕐 Poora test khatam hone ki time limit — time up hone par auto-submit.</div>
+          </div>
+
           <div class="form-group">
             <label>Pass Score (%)</label>
             <input type="number" id="set-pass" value="60" min="0" max="100" />
@@ -561,7 +591,7 @@
             </select>
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
-          <div id="settings-saved-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:#14532d;color:var(--green);font-size:0.85rem;font-weight:600;">✅ Settings saved successfully!</div>
+          <div id="settings-saved-msg" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:#14532d;color:var(--green);font-size:0.85rem;font-weight:600;">✅ Settings saved! Sab devices pe sync ho raha hai...</div>
         </div>
       </div>
     </div>
@@ -840,7 +870,7 @@ let testStartTime = null;
 // =======================================================
 
 // Paste your Google Apps Script Web App URL here after setup:
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzBlHJBANxioK6p2IfSMjhaL1ZKWACwCvKwgaXFppymDJvxtAd_zHqMKAykX5a93UXDRw/exec'; // Hardcoded — never changes
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyzzVKkruIticAmW5J23QLLcqgs5l5oM1O8jltWSAOmgIeWvmFMcfwQHpIQ4cAK44cdBQ/exec'; // Hardcoded — never changes
 
 function saveLocal() {
   try {
@@ -3179,6 +3209,17 @@ function loadSettingsForm() {
   document.getElementById('set-title').value    = settings.title;
   document.getElementById('set-pass').value     = settings.passScore;
   document.getElementById('set-show-ans').value = settings.showAnswers;
+
+  // Per question timer
+  const pqt = settings.perQuestionTime || 0;
+  const pqSel = document.getElementById('set-per-q-time');
+  if (pqSel) pqSel.value = ['0','30','45','60','90','120'].includes(String(pqt)) ? String(pqt) : '0';
+
+  // Overall time limit
+  const tl = settings.timeLimit || 0;
+  const tlSel = document.getElementById('set-time-limit');
+  if (tlSel) tlSel.value = ['0','15','20','30','40','45','60'].includes(String(tl)) ? String(tl) : '0';
+
   const qCount = settings.questionsPerStudent || 30;
   const sel = document.getElementById('set-q-count');
   const opts = ['10','20','30','40','50'];
@@ -3190,14 +3231,50 @@ function loadSettingsForm() {
     document.getElementById('set-q-custom').value = qCount;
     document.getElementById('set-q-custom').style.display = 'block';
   }
+
+  // Load latest settings from Google Sheet (cloud sync)
+  loadSettingsFromSheet();
+}
+
+// Fetch settings from Google Sheet "Settings" tab and apply them
+async function loadSettingsFromSheet() {
+  if (!GAS_URL) return;
+  try {
+    const res  = await fetch(GAS_URL + '?action=getSettings', { mode: 'cors' });
+    const data = await res.json();
+    if (data && !data.error) {
+      if (data.title)               settings.title               = data.title;
+      if (data.passScore)           settings.passScore           = parseInt(data.passScore) || 60;
+      if (data.showAnswers)         settings.showAnswers         = data.showAnswers;
+      if (data.questionsPerStudent) settings.questionsPerStudent = parseInt(data.questionsPerStudent) || 30;
+      if (data.perQuestionTime !== undefined) settings.perQuestionTime = parseInt(data.perQuestionTime) || 0;
+      if (data.timeLimit !== undefined)       settings.timeLimit       = parseInt(data.timeLimit) || 0;
+      saveLocal();
+      // Re-populate form with synced values
+      document.getElementById('set-title').value    = settings.title;
+      document.getElementById('set-pass').value     = settings.passScore;
+      document.getElementById('set-show-ans').value = settings.showAnswers;
+      const pqSel = document.getElementById('set-per-q-time');
+      if (pqSel) pqSel.value = String(settings.perQuestionTime || 0);
+      const tlSel = document.getElementById('set-time-limit');
+      if (tlSel) tlSel.value = String(settings.timeLimit || 0);
+      const qCount = settings.questionsPerStudent || 30;
+      const sel2 = document.getElementById('set-q-count');
+      const opts2 = ['10','20','30','40','50'];
+      if (opts2.includes(String(qCount))) { sel2.value = String(qCount); }
+      else { sel2.value = 'custom'; document.getElementById('set-q-custom').value = qCount; document.getElementById('set-q-custom').style.display='block'; }
+    }
+  } catch(e) { /* offline fallback — local settings still apply */ }
 }
 
 
 
 function saveSettings() {
-  settings.title       = document.getElementById('set-title').value || settings.title;
-  settings.passScore   = parseInt(document.getElementById('set-pass').value) || 60;
-  settings.showAnswers = document.getElementById('set-show-ans').value;
+  settings.title               = document.getElementById('set-title').value || settings.title;
+  settings.passScore           = parseInt(document.getElementById('set-pass').value) || 60;
+  settings.showAnswers         = document.getElementById('set-show-ans').value;
+  settings.perQuestionTime     = parseInt(document.getElementById('set-per-q-time')?.value) || 0;
+  settings.timeLimit           = parseInt(document.getElementById('set-time-limit')?.value) || 0;
   const sel = document.getElementById('set-q-count').value;
   if (sel === 'custom') {
     settings.questionsPerStudent = parseInt(document.getElementById('set-q-custom').value) || 30;
@@ -3205,10 +3282,36 @@ function saveSettings() {
     settings.questionsPerStudent = parseInt(sel) || 30;
   }
   saveData();
+
+  // Sync to Google Sheet so all devices pick up the same settings
+  saveSettingsToSheet();
+
   const msg = document.getElementById('settings-saved-msg');
   msg.style.display = 'block';
   setTimeout(() => msg.style.display = 'none', 3000);
-  showToast('✅ Settings saved!');
+  showToast('✅ Settings saved & syncing!');
+}
+
+// Push current settings to Google Sheet "Settings" tab
+async function saveSettingsToSheet() {
+  if (!GAS_URL) return;
+  const params = new URLSearchParams({
+    action:              'saveSettings',
+    title:               settings.title,
+    passScore:           settings.passScore,
+    showAnswers:         settings.showAnswers,
+    questionsPerStudent: settings.questionsPerStudent,
+    perQuestionTime:     settings.perQuestionTime,
+    timeLimit:           settings.timeLimit
+  });
+  try {
+    await fetch(GAS_URL + '?' + params.toString(), { method: 'GET', mode: 'no-cors' });
+  } catch(e) {
+    try {
+      const img = new Image();
+      img.src = GAS_URL + '?' + params.toString() + '&_t=' + Date.now();
+    } catch(e2) {}
+  }
 }
 
 // =======================================================
@@ -5050,6 +5153,8 @@ function showToast(msg) {
   loadLocal(); // show cached data instantly
   refreshTeacher();
   await loadData(); // then sync from cloud
+  // Also load latest settings from Sheet (so student devices get current timer/questions settings)
+  try { await loadSettingsFromSheet(); } catch(e) {}
   refreshTeacher();
   renderResults();
 })();
