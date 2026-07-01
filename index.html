@@ -809,6 +809,7 @@
 // =======================================================
 let questions = [];
 let results = [];
+const SETTINGS_VERSION = 'v3-20q-30s-10m'; // Change this to force-reset settings on all devices
 let settings = { title: 'Vocational Education Assessment', timeLimit: 10, passScore: 60, showAnswers: 'yes', perQuestionTime: 30, questionsPerStudent: 20 };
 let currentStudent = { name: '', id: '' };
 let testAnswers = {};
@@ -828,14 +829,33 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdXID4k9PNIcirBU1yeJg6
 function saveLocal() {
   try {
     localStorage.setItem('voced-questions', JSON.stringify(questions));
-    localStorage.setItem('voced-settings',  JSON.stringify(settings));
+    localStorage.setItem('voced-settings',  JSON.stringify({...settings, _version: SETTINGS_VERSION}));
     localStorage.setItem('voced-results',   JSON.stringify(results));
   } catch(e) {}
 }
 
 function loadLocal() {
   try { const q = localStorage.getItem('voced-questions'); if(q) questions = JSON.parse(q); } catch(e){}
-  try { const s = localStorage.getItem('voced-settings');  if(s) settings  = {...settings,...JSON.parse(s)}; } catch(e){}
+  try {
+    const s = localStorage.getItem('voced-settings');
+    if (s) {
+      const saved = JSON.parse(s);
+      // If version mismatch — ignore old timer/questions/timeLimit settings (use hardcoded defaults)
+      if (saved._version !== SETTINGS_VERSION) {
+        // Only carry over safe user prefs — not the timer/count/time values
+        if (saved.passScore)   settings.passScore   = saved.passScore;
+        if (saved.showAnswers) settings.showAnswers = saved.showAnswers;
+        // Force-save new version so this only runs once
+        saveLocal();
+      } else {
+        settings = {...settings, ...saved};
+        // Always enforce hardcoded values regardless of what was saved
+        settings.questionsPerStudent = 20;
+        settings.perQuestionTime     = 30;
+        settings.timeLimit           = 10;
+      }
+    }
+  } catch(e){}
   try { const r = localStorage.getItem('voced-results');   if(r) results   = JSON.parse(r); } catch(e){}
 }
 
